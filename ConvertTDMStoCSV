@@ -1,0 +1,127 @@
+
+Sub ConvertTDMStoCSV()
+'
+' TDMS_to_xls Macro
+' Author : Yash Bagla (yashbagla321@gmail.com, yash.bagla@drivesystemdesign.com)
+' Please cite us if you're using this resource
+
+
+' Acts upon all .tdms files in a "source" directory,
+' loading each one using the ExcelTDM Add In,
+' deleting the first sheet and saving the
+' remaining stream data as one .csv file
+' in a "target" directory.  Writes a list of
+' the files converted in a new sheet.
+'
+
+    Dim sourceDir As String, targetDir As String, fn As String, fnBase As String
+    Dim fso As Object, n As Long, resp As Integer, strNow As String, newSheet As Object
+    Dim tdmsAddIn As COMAddIn, importedWorkbook As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    Set tdmsAddIn = Application.COMAddIns.Item("ExcelTDM.TDMAddin")
+    tdmsAddIn.Connect = True
+    'Call tdmsAddIn.Object.Config.RootProperties.DeselectAll
+    'Call tdmsAddIn.Object.Config.ChannelProperties.DeselectAll
+    'Confirm only importing "Description" properties for Root
+    Call tdmsAddIn.Object.Config.RootProperties.DeselectAll
+    Call tdmsAddIn.Object.Config.RootProperties.Select("Description")
+
+    'Show the group count as property
+    Call tdmsAddIn.Object.Config.RootProperties.Select("Groups")
+
+    'Select all the available properties for Group
+    Call tdmsAddIn.Object.Config.GroupProperties.SelectAll
+    
+    tdmsAddIn.Object.Config.RootProperties.SelectCustomProperties = True
+    tdmsAddIn.Object.Config.GroupProperties.SelectCustomProperties = True
+    tdmsAddIn.Object.Config.ChannelProperties.SelectCustomProperties = True
+
+
+    'Choose TDMS Source Directory
+    With Application.FileDialog(msoFileDialogFolderPicker)
+        .Title = "Choose Source Directory of TDMS Files"
+        .AllowMultiSelect = False
+        .InitialFileName = ThisWorkbook.Path & "\"
+        .Show
+        On Error Resume Next
+        sourceDir = .SelectedItems(1)
+        Err.Clear
+        On Error GoTo 0
+    End With
+    If Dir(sourceDir, vbDirectory) = "" Then
+        MsgBox "No such folder.", vbCritical, sourceDir
+        Exit Sub
+    End If
+
+    'Choose CSV Target Directory
+    With Application.FileDialog(msoFileDialogFolderPicker)
+        .Title = "Choose Target Directory for CSV Files"
+        .AllowMultiSelect = False
+        .InitialFileName = ThisWorkbook.Path & "\"
+        .Show
+        On Error Resume Next
+        targetDir = .SelectedItems(1)
+        Err.Clear
+        On Error GoTo 0
+    End With
+    If Dir(targetDir, vbDirectory) = "" Then
+        MsgBox "No such folder.", vbCritical, targetDir
+        Exit Sub
+    End If
+
+
+
+    fn = Dir(sourceDir & "\*.tdms")
+    If fn = "" Then
+        MsgBox "No source TDMS files found.", vbInformation
+        Exit Sub
+    End If
+
+    resp = MsgBox("Begin conversion of TDMS files?" & vbCrLf & sourceDir & vbCrLf & "to" & vbCrLf & targetDir, vbYesNo, "Confirmation")
+    If resp = vbNo Then
+        MsgBox "Execution cancelled by user."
+        Exit Sub
+    End If
+
+    Set newSheet = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+    strNow = WorksheetFunction.Text(Now(), "m-d-yyyy h_mm_ss")
+    newSheet.Name = strNow
+    newSheet.Cells(1, 1).Value = "Files converted on " & strNow
+    newSheet.Cells(2, 1).Value = "TDMS Source Directory: " & sourceDir
+    newSheet.Cells(3, 1).Value = "CSV Target Directory: " & targetDir
+
+
+    Application.Calculation = xlCalculationManual
+    Application.ScreenUpdating = False
+    n = 5
+    Do While fn <> ""
+        fnBase = fso.GetBaseName(fn)
+
+        On Error Resume Next
+        Call tdmsAddIn.Object.ImportFile(sourceDir & "\" & fn, True)
+        If Err Then
+            MsgBox Err.Description, vbCritical
+            Exit Sub
+        End If
+        Set importedWorkbook = ActiveWorkbook
+        Application.DisplayAlerts = False
+        'importedWorkbook.Sheets(1).Delete
+        importedWorkbook.SaveAs Filename:=targetDir & "\" & fnBase & ".xlsx", FileFormat:=xlOpenXMLWorkbook
+        importedWorkbook.Close SaveChanges:=False
+        Application.DisplayAlerts = True
+
+        newSheet.Cells(n, 1).Value = fnBase
+        n = n + 1
+        fn = Dir
+    Loop
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+
+
+    Set fso = Nothing
+    Set newSheet = Nothing
+    Set importedWorkbook = Nothing
+End Sub
+
+
